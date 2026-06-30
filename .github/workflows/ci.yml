@@ -1,0 +1,138 @@
+name: CI
+
+# Runs on every PR (and on pushes to main after merge) and on manual dispatch.
+# The job enforces three gates and, on pull requests, upserts a single sticky
+# comment with the coverage table so reviewers see the result inline.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref so a force-push doesn't pile up runs.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege by default; the job below opts into exactly what it needs.
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Typecheck · Lint · Test (100% coverage)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # required to create/update the coverage comment
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5 # pinned to match the committed bun.lock for reproducible installs
+
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        id: typecheck
+        run: bun run typecheck
+
+      - name: Lint & format check (Biome)
+        id: lint
+        run: bun run lint
+
+      # bunfig.toml sets coverageThreshold = 1.0, so this step exits non-zero
+      # if any line/function is uncovered — the 100% gate is enforced here.
+      - name: Test with coverage gate (100%)
+        id: test
+        run: |
+          set -o pipefail
+          bun test --coverage 2>&1 | tee coverage.txt
+
+      - name: Write job summary
+        if: always()
+        env:
+          TC: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TEST: ${{ steps.test.outcome }}
+        run: |
+          {
+            echo "## CI results"
+            echo ""
+            echo "| Check | Outcome |"
+            echo "| --- | --- |"
+            echo "| Typecheck (\`tsc --noEmit\`) | \`${TC}\` |"
+            echo "| Lint & format (\`biome check\`) | \`${LINT}\` |"
+            echo "| Tests & coverage (\`bun test --coverage\`) | \`${TEST}\` |"
+            echo ""
+            echo "<details><summary>Coverage table</summary>"
+            echo ""
+            echo '```text'
+            awk '/^-+\|/{p=1} p; /Ran .*test/{exit}' coverage.txt || true
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Build the PR comment body (also runs on failure so reviewers see why).
+      - name: Build PR comment
+        if: always()
+        env:
+          TC: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TEST: ${{ steps.test.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          icon() { if [ "$1" = "success" ]; then echo "✅"; else echo "❌"; fi; }
+          {
+            echo "<!-- ci-coverage-report -->"
+            if [ "$TC" = "success" ] && [ "$LINT" = "success" ] && [ "$TEST" = "success" ]; then
+              echo "### ✅ CI passed — 100% coverage gate green"
+            else
+              echo "### ❌ CI failed"
+            fi
+            echo ""
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Typecheck (\`tsc --noEmit\`) | $(icon "$TC") \`$TC\` |"
+            echo "| Lint & format (\`biome check\`) | $(icon "$LINT") \`$LINT\` |"
+            echo "| Tests & coverage (\`bun test --coverage\`) | $(icon "$TEST") \`$TEST\` |"
+            echo ""
+            passln=$(grep -E '^[[:space:]]*[0-9]+[[:space:]]+pass' coverage.txt | head -1 | xargs || true)
+            failln=$(grep -E '^[[:space:]]*[0-9]+[[:space:]]+fail' coverage.txt | head -1 | xargs || true)
+            allcov=$(grep -E 'All files' coverage.txt | head -1 | tr -s ' ' | xargs || true)
+            [ -n "$passln" ] && echo "- **${passln}** · ${failln}"
+            [ -n "$allcov" ] && echo "- Coverage — \`${allcov}\`"
+            echo ""
+            echo "<details><summary>Full coverage table</summary>"
+            echo ""
+            echo '```text'
+            awk '/^-+\|/{p=1} p; /Ran .*test/{exit}' coverage.txt || true
+            echo '```'
+            echo "</details>"
+            echo ""
+            echo "<sub>Updated for commit \`${GITHUB_SHA:0:7}\` · [run logs](${RUN_URL})</sub>"
+          } > report.md
+
+      - name: Upsert coverage comment on PR
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('report.md', 'utf8');
+            const marker = '<!-- ci-coverage-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

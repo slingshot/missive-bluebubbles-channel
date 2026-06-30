@@ -1,5 +1,9 @@
 # BlueBubbles ↔ Missive Custom-Channel Bridge
 
+[![CI](https://github.com/slingshot/missive-bluebubbles-channel/actions/workflows/ci.yml/badge.svg)](https://github.com/slingshot/missive-bluebubbles-channel/actions/workflows/ci.yml)
+[![coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/slingshot/missive-bluebubbles-channel/actions/workflows/ci.yml)
+[![runtime: Bun 1.3](https://img.shields.io/badge/runtime-Bun%201.3-black?logo=bun)](https://bun.sh)
+
 A single **Bun + Elysia + TypeScript** service that makes a self-hosted
 [BlueBubbles](https://bluebubbles.app) iMessage server appear as a first-class
 **custom channel** inside [Missive](https://missiveapp.com) — bidirectionally,
