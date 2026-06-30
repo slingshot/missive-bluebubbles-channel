@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    // Environment / module system — Bun runs TypeScript ESM directly.
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    // Bun runtime + ambient types.
+    "types": ["bun"],
+
+    // Strictness — the contract demands precise types and no implicit any.
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    // Contract stubs declare their full parameter list but throw, so unused
+    // parameters are expected. Real dead locals are still caught above.
+    "noUnusedParameters": false,
+    "forceConsistentCasingInFileNames": true,
+
+    // Interop / ergonomics.
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["node_modules"]
+}

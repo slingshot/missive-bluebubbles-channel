@@ -1,0 +1,16 @@
+# Bun configuration for the BlueBubbles <-> Missive bridge.
+# The test runner enforces full coverage of every loaded source file.
+
+[test]
+# Populate a valid environment before any module loads (config validates at import).
+preload = ["./test/setup.ts"]
+# Always collect coverage when running `bun test`.
+coverage = true
+# Require 100% line-level AND function-level coverage. The build is not green
+# until every loaded module is fully exercised.
+coverageThreshold = 1.0
+# Console summary + machine-readable lcov (for CI / editors).
+coverageReporter = ["text", "lcov"]
+# Don't measure coverage of the tests or of the pure type-only module.
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["test/**", "**/*.test.ts", "src/types.ts"]

@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Bun
+.bun/
+
+# Local environment / secrets
+.env
+.env.local
+.env.*.local
+
+# SQLite database + WAL sidecar files
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Test coverage output
+coverage/
+*.lcov
+
+# Build output
+dist/
+build/
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+*.log
