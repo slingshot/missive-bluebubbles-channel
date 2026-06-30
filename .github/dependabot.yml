@@ -9,7 +9,10 @@ updates:
       prefix: ci
 
   # Keep runtime + dev dependencies current; group dev-deps to cut PR noise.
-  - package-ecosystem: npm
+  # NOTE: this is a Bun project — use the `bun` ecosystem (not `npm`) so
+  # Dependabot updates bun.lock alongside package.json. The `npm` ecosystem
+  # leaves bun.lock stale, which breaks `bun install --frozen-lockfile` in CI.
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
