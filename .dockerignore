@@ -1,0 +1,44 @@
+# Keep the build context lean and never bake secrets or local state into the image.
+
+# Dependencies (reinstalled in-image from the lockfile)
+node_modules/
+.bun/
+
+# Secrets / local environment
+.env
+.env.local
+.env.*.local
+
+# Durable state (belongs on a volume, never in the image)
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Tests, coverage, and CI — not needed at runtime
+test/
+coverage/
+*.lcov
+.github/
+
+# Docs
+docs/
+*.md
+
+# VCS / build output / editor / OS cruft
+.git/
+.gitignore
+dist/
+build/
+.idea/
+.vscode/
+.DS_Store
+*.log
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+docker-compose.yml

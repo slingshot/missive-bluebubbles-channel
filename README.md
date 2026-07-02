@@ -39,6 +39,7 @@ suppression) so delivery is reliable and effectively exactly-once.
 - [Environment variables](#environment-variables)
 - [Running it](#running-it)
 - [Deployment notes](#deployment-notes)
+  - [Run with Docker](#run-with-docker)
 - [Feature matrix](#feature-matrix)
 - [Known limitations & scope cuts](#known-limitations--scope-cuts)
 - [Troubleshooting](#troubleshooting)
@@ -367,6 +368,34 @@ also reports the cached caps, the pending outbox depth, and uptime.
 - **Secrets.** `.env` is git-ignored. The logger redacts any secret-keyed field
   (`password`, `token`, `secret`, `authorization`, `base64`, …) recursively, so
   structured logs never leak credentials or attachment bytes.
+
+### Run with Docker
+
+A `Dockerfile` and `docker-compose.yml` ship in the repo. There is no build
+step — the image is just Bun + production deps + `src/`, and `bun:sqlite` is part
+of the runtime — so the image is single-stage and small. Compose defines **only
+the bridge** (plus a persistent volume); the public HTTPS tunnel for `PUBLIC_URL`
+stays external (see the tunnel options above).
+
+```bash
+cp .env.example .env        # fill in the required values
+docker compose up -d --build
+docker compose logs -f      # watch the boot sequence
+curl localhost:3000/health  # { ready, caps, outboxDepth, uptimeMs }
+```
+
+- **BlueBubbles location.** Compose defaults `BB_URL` to
+  `http://host.docker.internal:1234` so the container reaches a BlueBubbles server
+  running on the **same host** (the `host.docker.internal:host-gateway` mapping
+  makes this work on Linux too; it is a no-op on Docker Desktop). For a **remote**
+  BlueBubbles server, set `BB_URL` in `.env` — it takes precedence over the default.
+- **Persistence.** State lives in the named volume `bridge-data` mounted at
+  `/app/data`; Compose pins `DB_PATH=/app/data/bridge.sqlite`. The SQLite file and
+  its WAL sidecars survive `docker compose down` (they're removed only by
+  `docker compose down -v`). The process runs as the non-root `bun` user.
+- **Port.** `PORT` (default `3000`) sets both the listen port and the published
+  host port. `.env` is never baked into the image (it's in `.dockerignore`); it is
+  injected at runtime via `env_file`.
 
 ---
 

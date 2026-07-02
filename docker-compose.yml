@@ -1,0 +1,33 @@
+# ---------------------------------------------------------------------------
+# Bridge service only. A public HTTPS tunnel for PUBLIC_URL (cloudflared / ngrok
+# / Tailscale Funnel) is intentionally external — see README "Run with Docker".
+#
+# All secrets/config come from `.env` (git-ignored). The two values below are
+# overridden here because they are container-networking-aware:
+#   - BB_URL defaults to reaching BlueBubbles on the host, but any BB_URL set in
+#     `.env` wins (same file Compose reads for ${...} substitution).
+#   - DB_PATH is pinned onto the volume regardless of what `.env` says.
+# ---------------------------------------------------------------------------
+services:
+  bridge:
+    build: .
+    env_file:
+      - .env
+    environment:
+      # Same host as Docker: leave BB_URL unset in .env to use the host gateway.
+      # Remote BlueBubbles: set BB_URL in .env and it takes precedence.
+      BB_URL: ${BB_URL:-http://host.docker.internal:1234}
+      DB_PATH: /app/data/bridge.sqlite
+    # Lets the host-gateway default resolve on Linux; a no-op on Docker Desktop.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Publish on the same port the bridge listens on (PORT keeps its meaning).
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    # Durable source of truth: SQLite db + WAL sidecars. Must outlive the container.
+    volumes:
+      - bridge-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  bridge-data:

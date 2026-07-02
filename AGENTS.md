@@ -68,6 +68,21 @@ bun run test:cov            # explicit coverage run (same gate)
 bun install --frozen-lockfile && bun run typecheck && bun run lint && bun test --coverage
 ```
 
+**Docker** (see `README.md#run-with-docker`):
+
+```bash
+docker compose up -d --build   # build + run the bridge (state on the bridge-data volume)
+docker compose logs -f         # watch the boot sequence
+docker compose down            # stop (keeps the volume; `-v` also drops state)
+```
+
+`Dockerfile` (single stage: no build step — Bun runs TS directly, `bun:sqlite`
+is built in; installs `--production` deps; runs as non-root `bun`), plus a
+bridge-only `docker-compose.yml` (persistent `bridge-data` volume, `.env` via
+`env_file`, `BB_URL` defaults to `host.docker.internal` but `.env` overrides).
+The tunnel for `PUBLIC_URL` stays external. `.dockerignore` keeps `.env`, state,
+and tests out of the image.
+
 ## Architecture
 
 ```
