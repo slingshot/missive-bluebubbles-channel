@@ -38,6 +38,7 @@ suppression) so delivery is reliable and effectively exactly-once.
 - [Creating the Missive custom channel (step by step)](#creating-the-missive-custom-channel-step-by-step)
 - [Environment variables](#environment-variables)
 - [Running it](#running-it)
+- [Monitoring dashboard](#monitoring-dashboard)
 - [Deployment notes](#deployment-notes)
   - [Run with Docker](#run-with-docker)
 - [Feature matrix](#feature-matrix)
@@ -124,6 +125,7 @@ src/
     missive-webhook.ts # POST /missive/webhook   (parse:'none' → raw HMAC → tx → 200; barrier key)
     bb-webhook.ts      # POST /bb/webhook/:token  (token guard → tx → 200; ephemeral throttle)
     health.ts          # GET /health, GET /
+    dashboard.ts       # GET /dashboard/:token (+ /stats, POST retry) — optional, token-guarded
   clients/
     missive.ts         # callMissive (429 Retry-After), postInboundMessage, postConversationComment
     bluebubbles.ts     # bb() url builder; send/query/download/webhook/(PA) react·edit·upload·multipart
@@ -313,6 +315,7 @@ it, and freezes it. **Required** keys must be present and non-empty.
 | `RECEIPTS_AS_POSTS` | `false` | If `true`, surface delivered/read receipts as Missive Posts comments. |
 | `CAPS_REPROBE_MS` | `300000` | Interval (ms) for re-probing BlueBubbles Private-API capability. |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error`. |
+| `DASHBOARD_TOKEN` | *(unset)* | Optional **≥32-char** token enabling the [monitoring dashboard](#monitoring-dashboard) at `/dashboard/<token>`. Unset disables it (routes 404). `openssl rand -hex 24`. |
 
 ---
 
@@ -336,7 +339,43 @@ re-probe, and the daily prune sweep. If BlueBubbles is down at boot, the bridge
 **still starts**, still accepts Missive webhooks, and queues work; a background
 probe completes registration once BlueBubbles is reachable. `GET /health` flips
 `ready: true` only once ping + `server/info` + webhook registration all pass, and
-also reports the cached caps, the pending outbox depth, and uptime.
+also reports the cached caps (`privateApi`, the raw `helperConnected` flag, and
+`lastProbeAt`), the pending outbox depth, and uptime.
+
+---
+
+## Monitoring dashboard
+
+An optional, self-contained web dashboard served by the bridge itself — no extra
+services, no build step. **Disabled by default**: it exists only when
+`DASHBOARD_TOKEN` (≥32 random chars) is set, and every dashboard route answers
+`404` otherwise, or on any token mismatch (constant-time compare, same guard as
+the BlueBubbles webhook).
+
+Open `https://<PUBLIC_URL>/dashboard/<DASHBOARD_TOKEN>` in a browser. The page
+polls its stats endpoint every 5 s and shows: the `ready` flag and uptime,
+Private-API + helper status with the age of the last successful probe, outbox
+depth per status (`pending` / `claimed` / `done` / `dead` — `done` counts rows
+still inside the 30-day retention window), 24-hour activity (inbound messages,
+outbound sends, suppressed echoes), the Missive rate-limiter's in-flight count,
+and the 20 newest **dead-lettered jobs** with their error and attempt count.
+
+Endpoints (all under the token path):
+
+| Endpoint | What it does |
+|---|---|
+| `GET /dashboard/<token>` | The HTML page (inline JS, no external assets). |
+| `GET /dashboard/<token>/stats` | The JSON snapshot the page polls. Local SQLite reads only — no network I/O, safe to poll or script against. |
+| `POST /dashboard/<token>/retry/<id>` | Flip a **dead** outbox job back to `pending` (attempts reset, due immediately). `409` if the job isn't dead, `404` if unknown. |
+
+**Retrying is safe by construction:** an outbound resend reuses the stored
+`tempGuid`, so BlueBubbles' `sendCache` dedups it (invariant #8), and each
+inbound sub-post has its own delivery-ledger entry, so a partially-delivered
+job only redoes what never landed (invariant #7).
+
+**Security posture:** the token is the whole guard — treat the URL as a secret,
+serve it only over HTTPS, and rotate by changing the env var. Dead-letter rows
+expose `kind`, `chat_guid`, and the error string, but never message payloads.
 
 ---
 
@@ -422,6 +461,7 @@ capability — it strips the private-only path and falls back to apple-script te
 | Inbound **group/participant** system lines + subject sync | ✅ | ✅ |
 | Identity name caching (`handle/query → contact/query`) | ✅ | ✅ |
 | Delivered/read receipts as Posts comments (`RECEIPTS_AS_POSTS`) | ✅ (read-status only when reported) | ✅ |
+| Built-in monitoring dashboard + dead-letter retry (`DASHBOARD_TOKEN`) | ✅ | ✅ |
 | **Outbound** reactions / edits / unsends | ❌ no Missive gesture maps to these (see scope cuts) | ❌ (clients exist but unreachable) |
 
 The `clients/bluebubbles.ts` Private-API methods (`react`, `edit`, `unsend`,

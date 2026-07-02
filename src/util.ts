@@ -36,6 +36,19 @@ export function verifyHmac(
   return timingSafeEqual(Buffer.from(header), Buffer.from(expected));
 }
 
+/**
+ * Constant-time string comparison (length-checked so it never throws). Used to
+ * guard token-in-path routes (BlueBubbles webhook, dashboard) against timing
+ * probes; the length check itself leaks only the length, which is acceptable
+ * for high-entropy tokens.
+ */
+export function constantTimeEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
 // ---------------------------------------------------------------------------
 // Time
 // ---------------------------------------------------------------------------

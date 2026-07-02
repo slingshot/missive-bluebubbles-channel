@@ -193,7 +193,11 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  spyOn(capability, 'getCaps').mockReturnValue({ privateApi: false, lastProbeAt: 0 });
+  spyOn(capability, 'getCaps').mockReturnValue({
+    privateApi: false,
+    helperConnected: false,
+    lastProbeAt: 0,
+  });
 });
 
 afterEach(() => {
@@ -396,7 +400,11 @@ describe('dispatch — chat/new SMS availability fallback', () => {
 
   it('falls back to SMS when the recipient is not iMessage-reachable (PA on)', async () => {
     const db = freshDb();
-    spyOn(capability, 'getCaps').mockReturnValue({ privateApi: true, lastProbeAt: 1 });
+    spyOn(capability, 'getCaps').mockReturnValue({
+      privateApi: true,
+      helperConnected: true,
+      lastProbeAt: 1,
+    });
     spyOn(outboundDomain, 'planOutbound').mockReturnValue(chatNewPlan());
     const avail = spyOn(bbClient, 'handleAvailabilityImessage').mockResolvedValue(false);
     const chatNew = spyOn(bbClient, 'chatNew').mockResolvedValue({ guid: 'SMSCHAT' });
@@ -409,7 +417,11 @@ describe('dispatch — chat/new SMS availability fallback', () => {
 
   it('keeps iMessage when the recipient is reachable (PA on)', async () => {
     const db = freshDb();
-    spyOn(capability, 'getCaps').mockReturnValue({ privateApi: true, lastProbeAt: 1 });
+    spyOn(capability, 'getCaps').mockReturnValue({
+      privateApi: true,
+      helperConnected: true,
+      lastProbeAt: 1,
+    });
     spyOn(outboundDomain, 'planOutbound').mockReturnValue(chatNewPlan());
     spyOn(bbClient, 'handleAvailabilityImessage').mockResolvedValue(true);
     const chatNew = spyOn(bbClient, 'chatNew').mockResolvedValue({ guid: 'IMSGCHAT' });
@@ -420,7 +432,11 @@ describe('dispatch — chat/new SMS availability fallback', () => {
 
   it('keeps the default service when the availability probe throws (PA on)', async () => {
     const db = freshDb();
-    spyOn(capability, 'getCaps').mockReturnValue({ privateApi: true, lastProbeAt: 1 });
+    spyOn(capability, 'getCaps').mockReturnValue({
+      privateApi: true,
+      helperConnected: true,
+      lastProbeAt: 1,
+    });
     spyOn(outboundDomain, 'planOutbound').mockReturnValue(chatNewPlan());
     spyOn(bbClient, 'handleAvailabilityImessage').mockRejectedValue(new Error('no PA route'));
     const chatNew = spyOn(bbClient, 'chatNew').mockResolvedValue({ guid: 'DEFCHAT' });
@@ -446,7 +462,11 @@ describe('dispatch — attachment sends', () => {
 
   it('Private API + caption: uploads each file and sends ONE multipart (full fidelity)', async () => {
     const db = freshDb();
-    spyOn(capability, 'getCaps').mockReturnValue({ privateApi: true, lastProbeAt: 1 });
+    spyOn(capability, 'getCaps').mockReturnValue({
+      privateApi: true,
+      helperConnected: true,
+      lastProbeAt: 1,
+    });
     spyOn(outboundDomain, 'planOutbound').mockReturnValue(attachmentPlan('t-mp', 'm-mp'));
     const upload = spyOn(bbClient, 'uploadAttachment').mockResolvedValue({ guid: 'up-1' });
     const multipart = spyOn(bbClient, 'sendMultipart').mockResolvedValue({
@@ -475,7 +495,11 @@ describe('dispatch — attachment sends', () => {
 
   it('Private API + multiple files (no caption): one multipart signed att:2', async () => {
     const db = freshDb();
-    spyOn(capability, 'getCaps').mockReturnValue({ privateApi: true, lastProbeAt: 1 });
+    spyOn(capability, 'getCaps').mockReturnValue({
+      privateApi: true,
+      helperConnected: true,
+      lastProbeAt: 1,
+    });
     spyOn(outboundDomain, 'planOutbound').mockReturnValue(attachmentPlan('t-mp2', 'm-mp2'));
     spyOn(bbClient, 'uploadAttachment').mockResolvedValue({ guid: 'up-x' });
     const multipart = spyOn(bbClient, 'sendMultipart').mockResolvedValue({

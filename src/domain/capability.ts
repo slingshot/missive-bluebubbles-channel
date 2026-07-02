@@ -21,7 +21,7 @@ import type { Caps } from '../types.ts';
  * The most recent capability snapshot. Defaults to "no Private API" with a zero
  * probe timestamp so callers can tell a probe has never succeeded.
  */
-let currentCaps: Caps = { privateApi: false, lastProbeAt: 0 };
+let currentCaps: Caps = { privateApi: false, helperConnected: false, lastProbeAt: 0 };
 
 /**
  * Probe BlueBubbles `server/info` and recompute the capability snapshot.
@@ -36,6 +36,7 @@ export async function detect(opts?: BbClientOptions): Promise<Caps> {
   const info = await serverInfo(opts);
   currentCaps = {
     privateApi: info.private_api === true && info.helper_connected === true,
+    helperConnected: info.helper_connected === true,
     lastProbeAt: Date.now(),
   };
   return currentCaps;

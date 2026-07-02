@@ -21,7 +21,7 @@ import * as worker from '../src/queue/outbox.ts';
 import type { Caps } from '../src/types.ts';
 
 const WEBHOOK_URL = `${config.PUBLIC_URL}/bb/webhook/${config.BB_HOOK_TOKEN}`;
-const CAPS: Caps = { privateApi: true, lastProbeAt: 1 };
+const CAPS: Caps = { privateApi: true, helperConnected: true, lastProbeAt: 1 };
 
 /** A test config bound to an ephemeral port. */
 const testConfig = { ...config, PORT: 0 };
@@ -53,6 +53,21 @@ describe('buildApp', () => {
     const res = await buildApp(config).handle(new Request('http://localhost/health'));
     expect(res.status).toBe(200);
     expect((await res.json()) as { ready: boolean }).toHaveProperty('ready');
+  });
+
+  it('leaves the dashboard unmounted (404) when DASHBOARD_TOKEN is unset', async () => {
+    // The test env never sets DASHBOARD_TOKEN, so it parses to null (disabled).
+    const res = await buildApp(config).handle(new Request('http://localhost/dashboard/anything'));
+    expect(res.status).toBe(404);
+  });
+
+  it('mounts the dashboard with a live missiveInFlight gauge when DASHBOARD_TOKEN is set', async () => {
+    const token = 'd'.repeat(32);
+    const res = await buildApp({ ...config, DASHBOARD_TOKEN: token }).handle(
+      new Request(`http://localhost/dashboard/${token}/stats`),
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { missiveInFlight: number }).missiveInFlight).toBe(0);
   });
 });
 

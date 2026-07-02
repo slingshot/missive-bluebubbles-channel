@@ -10,7 +10,7 @@ import { createDb, type Db } from '../../src/db.ts';
 import { type HealthReport, healthRoute } from '../../src/routes/health.ts';
 import type { Caps } from '../../src/types.ts';
 
-const CAPS: Caps = { privateApi: true, lastProbeAt: 1_234_567 };
+const CAPS: Caps = { privateApi: true, helperConnected: true, lastProbeAt: 1_234_567 };
 
 /** Build a route with an injectable readiness flag + seeded outbox depth. */
 function harness(opts: { ready?: boolean; pending?: number } = {}): {

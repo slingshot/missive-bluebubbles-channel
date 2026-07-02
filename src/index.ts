@@ -26,6 +26,7 @@ import { logger } from './logger.ts';
 import { startWorker, type Worker } from './queue/outbox.ts';
 import { createLimiter } from './queue/ratelimiter.ts';
 import { bbWebhookRoute } from './routes/bb-webhook.ts';
+import { dashboardRoute } from './routes/dashboard.ts';
 import { healthRoute } from './routes/health.ts';
 import { missiveWebhookRoute } from './routes/missive-webhook.ts';
 import type { Config } from './types.ts';
@@ -58,6 +59,15 @@ const WEBHOOK_EVENTS = [
  * server/info + webhook self-registration have all succeeded; reset on stop.
  */
 let ready = false;
+
+/**
+ * Missive rate-limiter singleton, shared by the outbox worker (which consumes
+ * permits) and the dashboard's `missiveInFlight` gauge (which only reads).
+ * Module-scoped like `ready` so {@link buildApp} can wire it without listening
+ * side effects; creating it is side-effect free (no timers until `acquire()`),
+ * and it safely survives stop/start cycles — `inFlight` self-drains to zero.
+ */
+const missiveLimiter = createLimiter();
 
 /** Daily prune sweep interval (ms). */
 export const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -101,7 +111,17 @@ export function buildApp(appConfig: Config): Elysia {
         receiptsAsPosts: appConfig.RECEIPTS_AS_POSTS,
       }),
     )
-    .use(healthRoute({ db, getCaps, isReady: () => ready })) as unknown as Elysia;
+    .use(healthRoute({ db, getCaps, isReady: () => ready }))
+    .use(
+      dashboardRoute({
+        db,
+        logger,
+        getCaps,
+        isReady: () => ready,
+        token: appConfig.DASHBOARD_TOKEN,
+        missiveInFlight: () => missiveLimiter.inFlight,
+      }),
+    ) as unknown as Elysia;
 }
 
 /**
@@ -122,7 +142,6 @@ export async function ensureBbWebhook(appConfig: Config): Promise<void> {
 /** Wire dependencies, run the boot sequence, and listen. */
 export async function startServer(appConfig: Config): Promise<AppHandle> {
   const app = buildApp(appConfig);
-  const limiter = createLimiter();
   let worker: Worker | null = null;
   let stopReprobe: (() => void) | null = null;
   let stopPrune: (() => void) | null = null;
@@ -153,7 +172,12 @@ export async function startServer(appConfig: Config): Promise<AppHandle> {
       // and caps recover even if the initial boot probe failed (startup is non-fatal).
       stopReprobe = startReprobe(appConfig.CAPS_REPROBE_MS);
       stopPrune = startPruneSweep(db);
-      worker = startWorker({ db, limiter, logger, receiptsAsPosts: appConfig.RECEIPTS_AS_POSTS });
+      worker = startWorker({
+        db,
+        limiter: missiveLimiter,
+        logger,
+        receiptsAsPosts: appConfig.RECEIPTS_AS_POSTS,
+      });
       resolveBoot();
     }
   });

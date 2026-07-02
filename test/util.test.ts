@@ -5,6 +5,7 @@ import {
   bbDedupKey,
   canonicalHash,
   canonicalStringify,
+  constantTimeEqual,
   msToUnix,
   verifyHmac,
 } from '../src/util.ts';
@@ -36,6 +37,21 @@ describe('verifyHmac', () => {
 
   it('rejects when the wrong secret is used', () => {
     expect(verifyHmac('other-secret', raw, valid)).toBe(false);
+  });
+});
+
+describe('constantTimeEqual', () => {
+  it('accepts equal strings', () => {
+    expect(constantTimeEqual('secret-token', 'secret-token')).toBe(true);
+  });
+
+  it('rejects a same-length mismatch', () => {
+    expect(constantTimeEqual('secret-token', 'secret-tokeN')).toBe(false);
+  });
+
+  it('rejects a different-length string without throwing', () => {
+    expect(constantTimeEqual('secret-token', 'secret')).toBe(false);
+    expect(constantTimeEqual('', 'x')).toBe(false);
   });
 });
 

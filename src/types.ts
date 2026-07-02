@@ -43,6 +43,8 @@ export interface Config {
   readonly PUBLIC_URL: string;
   /** Random token guarding the unsigned BlueBubbles webhook (>= 32 chars). */
   readonly BB_HOOK_TOKEN: string;
+  /** Optional token guarding the monitoring dashboard; `null` disables it. */
+  readonly DASHBOARD_TOKEN: string | null;
   /** The Mac's own iMessage address; used as inbound `to_fields[0]`. */
   readonly SELF_HANDLE: string;
   /** Display name for the bridge's own identity. */
@@ -217,6 +219,8 @@ export interface BbMessage {
 export interface Caps {
   /** True iff `private_api === true && helper_connected === true`. */
   readonly privateApi: boolean;
+  /** Raw `helper_connected` flag from the last successful probe. */
+  readonly helperConnected: boolean;
   /** Epoch ms of the last successful probe. */
   readonly lastProbeAt: number;
 }

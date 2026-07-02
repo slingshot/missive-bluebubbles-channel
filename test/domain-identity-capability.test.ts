@@ -170,6 +170,7 @@ describe('capability.detect', () => {
   it('returns the no-Private-API default before the first probe', () => {
     const caps = getCaps();
     expect(caps.privateApi).toBe(false);
+    expect(caps.helperConnected).toBe(false);
     expect(caps.lastProbeAt).toBe(0);
   });
 
@@ -180,22 +181,25 @@ describe('capability.detect', () => {
     const caps = await detect();
 
     expect(caps.privateApi).toBe(true);
+    expect(caps.helperConnected).toBe(true);
     expect(caps.lastProbeAt).toBeGreaterThanOrEqual(before);
     expect(caps.lastProbeAt).toBeLessThanOrEqual(Date.now());
     // getCaps reflects the latest probe.
     expect(getCaps()).toEqual(caps);
   });
 
-  it('reports privateApi=false when helper_connected is false', async () => {
+  it('reports privateApi=false when helper_connected is false (but tracks helperConnected raw)', async () => {
     serverInfo.mockResolvedValue({ private_api: true, helper_connected: false });
     const caps = await detect();
     expect(caps.privateApi).toBe(false);
+    expect(caps.helperConnected).toBe(false);
   });
 
-  it('reports privateApi=false when private_api is false', async () => {
+  it('reports privateApi=false when private_api is false (even though helperConnected is raw-true)', async () => {
     serverInfo.mockResolvedValue({ private_api: false, helper_connected: true });
     const caps = await detect();
     expect(caps.privateApi).toBe(false);
+    expect(caps.helperConnected).toBe(true);
   });
 
   it('forwards client opts to server/info', async () => {

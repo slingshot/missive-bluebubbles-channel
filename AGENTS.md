@@ -98,6 +98,8 @@ src/
     missive-webhook.ts  parse:'none' → raw-body HMAC → dedupAndEnqueue → 200
     bb-webhook.ts       token guard → per-type dedup key → dedupAndEnqueue → 200
     health.ts           GET /health, GET /  (caps, lastProbeAt, outboxDepth, ready)
+    dashboard.ts        optional monitoring UI: GET page + /stats JSON, POST retry/:id;
+                        DASHBOARD_TOKEN path guard (null token ⇒ every route 404s)
   clients/
     bluebubbles.ts      transport only: sendText/Attachment, chatNew, queries,
                         downloadAttachment, serverInfo, webhook mgmt, PA: react/edit/…
@@ -205,6 +207,11 @@ and `config.ts`. **Changing any of these means updating both docs.**
   through the token-bucket limiter and honor `429 Retry-After`.
 - **`POST /v1/messages` may return an empty 201** — never depend on its response
   body for ids; correlation is client-side.
+- **The dashboard HTML is a static template string** — its client-side JS is data
+  to the coverage gate (not measured), so keep server-side branches in
+  `routes/dashboard.ts` minimal. In that client JS, render attacker-influenced
+  strings (`last_error`, anything payload-derived) via `textContent` — never
+  `innerHTML` — and never interpolate the token into the page.
 
 ## Definition of Done
 

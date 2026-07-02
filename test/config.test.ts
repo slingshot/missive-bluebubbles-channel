@@ -138,6 +138,29 @@ describe('loadConfig — validation failures', () => {
   });
 });
 
+describe('DASHBOARD_TOKEN', () => {
+  it('is null when unset', () => {
+    const c = loadConfig(validEnv());
+    expect(c.DASHBOARD_TOKEN).toBeNull();
+  });
+
+  it('treats an empty/whitespace value as unset (null)', () => {
+    expect(loadConfig(validEnv({ DASHBOARD_TOKEN: '' })).DASHBOARD_TOKEN).toBeNull();
+    expect(loadConfig(validEnv({ DASHBOARD_TOKEN: '   ' })).DASHBOARD_TOKEN).toBeNull();
+  });
+
+  it('rejects a token shorter than the minimum length', () => {
+    expect(() => loadConfig(validEnv({ DASHBOARD_TOKEN: 'short' }))).toThrow(
+      /DASHBOARD_TOKEN must be at least/,
+    );
+  });
+
+  it('accepts a valid token verbatim', () => {
+    const token = 'd'.repeat(MIN_HOOK_TOKEN_LENGTH);
+    expect(loadConfig(validEnv({ DASHBOARD_TOKEN: token })).DASHBOARD_TOKEN).toBe(token);
+  });
+});
+
 describe('parseBool', () => {
   it('falls back when unset/blank', () => {
     const e: string[] = [];
