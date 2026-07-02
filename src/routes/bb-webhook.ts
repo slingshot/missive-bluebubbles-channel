@@ -11,12 +11,11 @@
  * persisted.
  */
 
-import { timingSafeEqual } from 'node:crypto';
 import { Elysia } from 'elysia';
 import type { Db } from '../db.ts';
 import type { Logger } from '../logger.ts';
 import type { BbWebhook } from '../types.ts';
-import { bbDedupKey } from '../util.ts';
+import { bbDedupKey, constantTimeEqual } from '../util.ts';
 
 /** Injected dependencies for the BlueBubbles webhook route. */
 export interface BbWebhookDeps {
@@ -35,14 +34,6 @@ const MAX_BODY_BYTES = 2_000_000;
 
 /** Minimum spacing between logged ephemeral events for one chat (ms). */
 const EPHEMERAL_THROTTLE_MS = 10_000;
-
-/** Constant-time string comparison (length-checked so it never throws). */
-function constantTimeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
 
 /**
  * Drop ephemeral-throttle entries older than the throttle window so the
