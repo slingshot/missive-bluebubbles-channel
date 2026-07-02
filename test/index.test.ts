@@ -21,7 +21,7 @@ import * as worker from '../src/queue/outbox.ts';
 import type { Caps } from '../src/types.ts';
 
 const WEBHOOK_URL = `${config.PUBLIC_URL}/bb/webhook/${config.BB_HOOK_TOKEN}`;
-const CAPS: Caps = { privateApi: true, lastProbeAt: 1 };
+const CAPS: Caps = { privateApi: true, helperConnected: true, lastProbeAt: 1 };
 
 /** A test config bound to an ephemeral port. */
 const testConfig = { ...config, PORT: 0 };

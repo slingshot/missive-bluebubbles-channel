@@ -19,7 +19,7 @@ function makeCtx(over: Partial<InboundCtx> = {}): InboundCtx {
     selfName: 'Me',
     maxPayloadBytes: 9_500_000,
     receiptsAsPosts: false,
-    caps: { privateApi: false, lastProbeAt: 0 },
+    caps: { privateApi: false, helperConnected: false, lastProbeAt: 0 },
     lookupChatForMessage: () => null,
     getMessageText: () => null,
     resolveName: (a) => `Name(${a})`,

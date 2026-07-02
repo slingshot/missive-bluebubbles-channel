@@ -217,6 +217,8 @@ export interface BbMessage {
 export interface Caps {
   /** True iff `private_api === true && helper_connected === true`. */
   readonly privateApi: boolean;
+  /** Raw `helper_connected` flag from the last successful probe. */
+  readonly helperConnected: boolean;
   /** Epoch ms of the last successful probe. */
   readonly lastProbeAt: number;
 }
