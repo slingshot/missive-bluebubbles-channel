@@ -45,6 +45,7 @@ suppression) so delivery is reliable and effectively exactly-once.
 - [The 8 correctness invariants](#the-8-correctness-invariants)
 - [Testing & coverage](#testing--coverage)
 - [Conventions](#conventions)
+- [Contributing](#contributing)
 
 ---
 
@@ -531,4 +532,16 @@ client system, with assertions that fail if the wiring is removed:
   **only** place that performs side effects. Secrets are never logged.
 - The server bootstrap in `src/index.ts` is guarded by `import.meta.main`, so the
   module imports cleanly in tests without binding a port.
-```
+
+---
+
+## Contributing
+
+Contributors and AI agents: read **[`AGENTS.md`](AGENTS.md)** first — it covers the
+architecture, the 8 correctness invariants, conventions, the local gate, and the
+CI / Dependabot setup. (`CLAUDE.md` is a symlink to it.)
+
+> **Every change must update the relevant documentation** — `README.md`,
+> `AGENTS.md`, and `.env.example` (when config changes) — in the same PR. Changes
+> that alter behavior or config without corresponding doc updates should not be
+> merged. See the [Definition of Done](AGENTS.md#definition-of-done).
