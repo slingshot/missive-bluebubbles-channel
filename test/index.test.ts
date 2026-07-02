@@ -54,6 +54,21 @@ describe('buildApp', () => {
     expect(res.status).toBe(200);
     expect((await res.json()) as { ready: boolean }).toHaveProperty('ready');
   });
+
+  it('leaves the dashboard unmounted (404) when DASHBOARD_TOKEN is unset', async () => {
+    // The test env never sets DASHBOARD_TOKEN, so it parses to null (disabled).
+    const res = await buildApp(config).handle(new Request('http://localhost/dashboard/anything'));
+    expect(res.status).toBe(404);
+  });
+
+  it('mounts the dashboard with a live missiveInFlight gauge when DASHBOARD_TOKEN is set', async () => {
+    const token = 'd'.repeat(32);
+    const res = await buildApp({ ...config, DASHBOARD_TOKEN: token }).handle(
+      new Request(`http://localhost/dashboard/${token}/stats`),
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { missiveInFlight: number }).missiveInFlight).toBe(0);
+  });
 });
 
 describe('ensureBbWebhook', () => {
