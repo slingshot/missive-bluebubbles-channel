@@ -121,6 +121,28 @@ export interface Db {
   /** Whether a sub-post's `external_id` was already delivered (skip on retry). */
   isPostDelivered(externalId: string): boolean;
 
+  // --- Monitoring ---------------------------------------------------------
+  /** Tally outbox rows by status, for the monitoring dashboard summary. */
+  outboxCounts(): { pending: number; claimed: number; done: number; dead: number };
+  /** List the most recently dead-lettered jobs (newest first), payload parsed. */
+  listDeadJobs(limit: number): OutboxRow[];
+  /** Count inbound messages, outbound sends, and suppressed echoes since a cutoff. */
+  activitySince(sinceMs: number): { inbound: number; outbound: number; echoesSuppressed: number };
+  /**
+   * Revive a dead-lettered job back to `pending` with a fresh attempt budget.
+   *
+   * Safety: the outbox worker only ever transitions rows it currently holds the
+   * lease for (`status = 'claimed'` — see the guards on {@link Db.markDone},
+   * {@link Db.reschedule}, {@link Db.markDead}), so a `dead` row is completely
+   * inert to the worker until this flips it back to `pending`; there is no race
+   * with an in-flight dispatch. The retried row keeps its original (low) `id`,
+   * so the per-chat barrier in {@link Db.claimDueJobs} re-serializes it ahead of
+   * any newer `pending` siblings for the same chat. Resetting `attempts = 0` is
+   * deliberate: it grants the revived job a fresh retry budget rather than
+   * resuming where it dead-lettered.
+   */
+  retryDead(id: number): 'retried' | 'not-dead' | 'missing';
+
   // --- Maintenance ------------------------------------------------------
   /** Prune dedup ledger, message cache, and done outbox rows older than a cutoff. */
   pruneOld(beforeMs: number): void;
@@ -333,6 +355,25 @@ export function createDb(path: string, initialClock?: () => number): Db {
 
   const selSeen = raw.query('SELECT 1 AS hit FROM seen_events WHERE id = $id');
 
+  const selOutboxCounts = raw.query('SELECT status, COUNT(*) AS n FROM outbox GROUP BY status');
+  const selDeadJobs = raw.query(
+    "SELECT * FROM outbox WHERE status = 'dead' ORDER BY id DESC LIMIT $limit",
+  );
+  const selInboundSince = raw.query(
+    'SELECT COUNT(*) AS n FROM message WHERE is_from_me = 0 AND created_at >= $since',
+  );
+  const selOutboundSince = raw.query(
+    'SELECT COUNT(*) AS n FROM sent_map WHERE created_at >= $since',
+  );
+  const selEchoesSuppressedSince = raw.query(
+    'SELECT COUNT(*) AS n FROM sent_map WHERE echo_consumed = 1 AND created_at >= $since',
+  );
+  const selOutboxStatus = raw.query('SELECT status FROM outbox WHERE id = $id');
+  const updRetryDead = raw.query(
+    `UPDATE outbox SET status = 'pending', attempts = 0, next_at = $next_at, last_error = NULL
+     WHERE id = $id AND status = 'dead'`,
+  );
+
   const delSeen = raw.query('DELETE FROM seen_events WHERE created_at < $before');
   const delMsg = raw.query('DELETE FROM message WHERE created_at < $before');
   const delOutbox = raw.query("DELETE FROM outbox WHERE status = 'done' AND created_at < $before");
@@ -399,6 +440,14 @@ export function createDb(path: string, initialClock?: () => number): Db {
     const rows = selClaim.all({ now: nowMs, limit }) as RawOutboxRow[];
     for (const r of rows) updClaim.run({ id: r.id });
     return rows.map((r) => toOutboxRow({ ...r, status: 'claimed' }));
+  });
+
+  const retryDead = raw.transaction((id: number): 'retried' | 'not-dead' | 'missing' => {
+    const row = selOutboxStatus.get({ id }) as { status: string } | undefined;
+    if (!row) return 'missing';
+    if (row.status !== 'dead') return 'not-dead';
+    updRetryDead.run({ id, next_at: now() });
+    return 'retried';
   });
 
   const pruneOld = raw.transaction((beforeMs: number): void => {
@@ -491,6 +540,20 @@ export function createDb(path: string, initialClock?: () => number): Db {
       insSeen.run({ id: `post:${externalId}`, ts: now() });
     },
     isPostDelivered: (externalId) => selSeen.get({ id: `post:${externalId}` }) != null,
+    outboxCounts: () => {
+      const counts = { pending: 0, claimed: 0, done: 0, dead: 0 };
+      for (const r of selOutboxCounts.all() as { status: string; n: number }[]) {
+        counts[r.status as keyof typeof counts] = r.n;
+      }
+      return counts;
+    },
+    listDeadJobs: (limit) => (selDeadJobs.all({ limit }) as RawOutboxRow[]).map(toOutboxRow),
+    activitySince: (sinceMs) => ({
+      inbound: (selInboundSince.get({ since: sinceMs }) as { n: number }).n,
+      outbound: (selOutboundSince.get({ since: sinceMs }) as { n: number }).n,
+      echoesSuppressed: (selEchoesSuppressedSince.get({ since: sinceMs }) as { n: number }).n,
+    }),
+    retryDead,
     pruneOld,
     close: () => raw.close(),
   };

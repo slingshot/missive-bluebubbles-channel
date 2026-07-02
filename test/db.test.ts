@@ -455,6 +455,140 @@ describe('sent_map + echo correlation', () => {
   });
 });
 
+describe('monitoring helpers', () => {
+  describe('outboxCounts', () => {
+    it('returns zero counts for an empty outbox', () => {
+      const { d } = freshDb();
+      expect(d.outboxCounts()).toEqual({ pending: 0, claimed: 0, done: 0, dead: 0 });
+    });
+
+    it('tallies rows across all four statuses', () => {
+      const { d } = freshDb();
+
+      d.enqueue(bbJob('B'));
+      d.claimDueJobs(d.now(), 10); // B -> claimed, left claimed
+
+      d.enqueue(bbJob('C'));
+      const cJob = d.claimDueJobs(d.now(), 10).find((r) => r.chat_guid === 'C')!;
+      d.markDone(cJob.id);
+
+      d.enqueue(bbJob('D'));
+      const dJob = d.claimDueJobs(d.now(), 10).find((r) => r.chat_guid === 'D')!;
+      d.markDead(dJob.id, 'boom');
+
+      // Enqueued last, and no further claim pass runs, so it stays pending.
+      d.enqueue(bbJob('A'));
+
+      expect(d.outboxCounts()).toEqual({ pending: 1, claimed: 1, done: 1, dead: 1 });
+    });
+  });
+
+  describe('listDeadJobs', () => {
+    it('lists dead jobs newest-first, respects the limit, and parses payload', () => {
+      const { d } = freshDb();
+      const ids: number[] = [];
+      for (const payload of [{ n: 1 }, { n: 2 }, { n: 3 }]) {
+        d.enqueue({ kind: 'bb_send', chat_guid: 'A', payload });
+        const [job] = d.claimDueJobs(d.now(), 10);
+        d.markDead(job!.id, 'fail');
+        ids.push(job!.id);
+      }
+
+      const dead = d.listDeadJobs(10);
+      expect(dead.map((r) => r.id)).toEqual([...ids].reverse());
+      expect(dead.every((r) => r.status === 'dead')).toBe(true);
+      expect(dead[0]?.payload).toEqual({ n: 3 });
+
+      expect(d.listDeadJobs(2)).toHaveLength(2);
+    });
+
+    it('returns an empty array when there are no dead jobs', () => {
+      const { d } = freshDb();
+      expect(d.listDeadJobs(10)).toEqual([]);
+    });
+  });
+
+  describe('activitySince', () => {
+    it('counts inbound/outbound/echoesSuppressed with boundary inclusivity and exclusions', () => {
+      const { d, at } = freshDb();
+
+      at(1_000);
+      d.cacheMessage('old-in', 'cA', 'old', false); // before cutoff -> excluded from inbound
+      d.recordSend({ tempGuid: 'old-out', chatGuid: 'cA', missiveMsgId: 'm-old', text: 'old-out' }); // before cutoff -> excluded from outbound
+      d.recordSend({
+        tempGuid: 'old-echo',
+        chatGuid: 'cA',
+        missiveMsgId: 'm-old-echo',
+        text: 'old-echo',
+      }); // consumed but before cutoff -> excluded from echoesSuppressed
+      expect(d.consumeEcho({ chatGuid: 'cA', text: 'old-echo', sinceMs: 0 })?.temp_guid).toBe(
+        'old-echo',
+      );
+
+      at(2_000);
+      d.cacheMessage('in-1', 'cA', 'hi', false); // at cutoff, inbound -> counted (boundary inclusive)
+      d.cacheMessage('in-me', 'cA', 'hi', true); // is_from_me=1 -> excluded from inbound
+      d.recordSend({ tempGuid: 'out-1', chatGuid: 'cA', missiveMsgId: 'm1', text: 'out-1' }); // at cutoff -> counted
+      d.recordSend({ tempGuid: 'out-2', chatGuid: 'cA', missiveMsgId: 'm2', text: 'out-2' }); // never consumed -> excluded from echoesSuppressed
+      expect(d.consumeEcho({ chatGuid: 'cA', text: 'out-1', sinceMs: 0 })?.temp_guid).toBe('out-1');
+
+      expect(d.activitySince(2_000)).toEqual({ inbound: 1, outbound: 2, echoesSuppressed: 1 });
+    });
+
+    it('returns zero counts when nothing has happened since the cutoff', () => {
+      const { d } = freshDb();
+      expect(d.activitySince(d.now())).toEqual({ inbound: 0, outbound: 0, echoesSuppressed: 0 });
+    });
+  });
+
+  describe('retryDead', () => {
+    it('returns "missing" for an unknown id', () => {
+      const { d } = freshDb();
+      expect(d.retryDead(999)).toBe('missing');
+    });
+
+    it('returns "not-dead" and leaves a pending job unchanged', () => {
+      const { d } = freshDb();
+      d.enqueue(bbJob('A'));
+      const before = d.raw.query('SELECT * FROM outbox WHERE chat_guid = $c').get({ c: 'A' });
+      const id = (before as { id: number }).id;
+
+      expect(d.retryDead(id)).toBe('not-dead');
+
+      const after = d.raw.query('SELECT * FROM outbox WHERE chat_guid = $c').get({ c: 'A' });
+      expect(after).toEqual(before);
+    });
+
+    it('revives a dead job to pending with a fresh attempt budget and clears the error', () => {
+      const { d } = freshDb();
+      d.enqueue(bbJob('A'));
+      const [job] = d.claimDueJobs(d.now(), 10);
+      d.reschedule(job!.id, 3, d.now(), 'transient'); // bump attempts before it eventually dies
+      const [reclaimed] = d.claimDueJobs(d.now(), 10);
+      d.markDead(reclaimed!.id, 'permanent failure');
+
+      expect(d.retryDead(job!.id)).toBe('retried');
+
+      const row = d.raw
+        .query('SELECT status, attempts, next_at, last_error FROM outbox WHERE id = $id')
+        .get({ id: job!.id }) as {
+        status: string;
+        attempts: number;
+        next_at: number;
+        last_error: string | null;
+      };
+      expect(row.status).toBe('pending');
+      expect(row.attempts).toBe(0);
+      expect(row.next_at).toBe(d.now());
+      expect(row.last_error).toBeNull();
+
+      // The revived row is claimable again.
+      const claimed = d.claimDueJobs(d.now(), 10);
+      expect(claimed.map((r) => r.id)).toContain(job!.id);
+    });
+  });
+});
+
 describe('pruneOld', () => {
   it('drops aged dedup ledger, message cache, and done outbox rows', () => {
     let t = 1_000;
