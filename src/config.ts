@@ -103,6 +103,13 @@ export function loadConfig(env: Env = process.env): Config {
     errors.push(`BB_HOOK_TOKEN must be at least ${MIN_HOOK_TOKEN_LENGTH} characters`);
   }
 
+  // Optional dashboard guard token; unset/empty disables the dashboard.
+  const DASHBOARD_TOKEN =
+    env.DASHBOARD_TOKEN && env.DASHBOARD_TOKEN.trim() !== '' ? env.DASHBOARD_TOKEN : null;
+  if (DASHBOARD_TOKEN !== null && DASHBOARD_TOKEN.length < MIN_HOOK_TOKEN_LENGTH) {
+    errors.push(`DASHBOARD_TOKEN must be at least ${MIN_HOOK_TOKEN_LENGTH} characters`);
+  }
+
   // Optionals with defaults.
   const PORT = parseIntField(env.PORT, 3000, 'PORT', errors);
   const MISSIVE_MAX_PAYLOAD_BYTES = parseIntField(
@@ -147,6 +154,7 @@ export function loadConfig(env: Env = process.env): Config {
     MISSIVE_HMAC_SECRET: env.MISSIVE_HMAC_SECRET as string,
     PUBLIC_URL: stripTrailingSlash(env.PUBLIC_URL as string),
     BB_HOOK_TOKEN: env.BB_HOOK_TOKEN as string,
+    DASHBOARD_TOKEN,
     SELF_HANDLE: env.SELF_HANDLE as string,
     SELF_NAME: env.SELF_NAME && env.SELF_NAME.trim() !== '' ? env.SELF_NAME : 'Me',
     PORT,
